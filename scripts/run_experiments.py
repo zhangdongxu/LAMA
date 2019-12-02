@@ -7,6 +7,7 @@
 import argparse
 from batch_eval_KB_completion import main as run_evaluation
 from batch_eval_KB_completion import load_file
+from batch_train_KB_completion import main as run_train
 from lama.modules import build_model_by_name
 import pprint
 import statistics
@@ -66,6 +67,20 @@ LMs = [
     }
 ]
 
+LMs = [
+    {
+        "lm":
+        "bert",
+        "label":
+        "bert_base",
+        "models_names": ["bert"],
+        "bert_model_name":
+        "bert-base-cased",
+        "bert_model_dir":
+        "pre-trained_language_models/bert/cased_L-12_H-768_A-12"
+    },
+]
+
 
 def run_experiments(
     relations,
@@ -87,15 +102,17 @@ def run_experiments(
     type_count = defaultdict(list)
 
     results_file = open("last_results.csv", "w+")
-
     for relation in relations:
         pp.pprint(relation)
         PARAMETERS = {
-            "dataset_filename": "{}{}{}".format(
+            "trainset_filename": "{}{}_train{}".format(
+                data_path_pre, relation["relation"], data_path_post
+            ),
+            "testset_filename": "{}{}_test{}".format(
                 data_path_pre, relation["relation"], data_path_post
             ),
             "common_vocab_filename": "pre-trained_language_models/common_vocab_cased.txt",
-            "template": "",
+            "template": [],
             "bert_vocab_name": "vocab.txt",
             "batch_size": 32,
             "logdir": "output",
@@ -104,7 +121,7 @@ def run_experiments(
             ),
             "lowercase": False,
             "max_sentence_length": 100,
-            "threads": -1,
+            "threads": 1,
             "interactive": False,
         }
 
@@ -118,7 +135,7 @@ def run_experiments(
 
         # see if file exists
         try:
-            data = load_file(args.dataset_filename)
+            data = load_file(args.testset_filename)
         except Exception as e:
             print("Relation {} excluded.".format(relation["relation"]))
             print("Exception: {}".format(e))
@@ -127,6 +144,11 @@ def run_experiments(
         if model is None:
             [model_type_name] = args.models_names
             model = build_model_by_name(model_type_name, args)
+            print('vocab size: {}'.format(model.masked_bert_model.config.vocab_size))
+            model.masked_bert_model.resize_embedding_and_fc(model.masked_bert_model.config.vocab_size + 9)
+
+        
+        run_train(args, model)
 
         Precision1 = run_evaluation(args, shuffle_data=False, model=model)
         print("P@1 : {}".format(Precision1), flush=True)
@@ -139,7 +161,7 @@ def run_experiments(
 
         if "type" in relation:
             type_Precision1[relation["type"]].append(Precision1)
-            data = load_file(PARAMETERS["dataset_filename"])
+            data = load_file(PARAMETERS["testset_filename"])
             type_count[relation["type"]].append(len(data))
 
     mean_p1 = statistics.mean(all_Precision1)
@@ -162,7 +184,8 @@ def run_experiments(
 
 
 def get_TREx_parameters(data_path_pre="data/"):
-    relations = load_file("{}relations.jsonl".format(data_path_pre))
+    #relations = load_file("{}relations.jsonl".format(data_path_pre))
+    relations = load_file("{}relations_learned.jsonl".format(data_path_pre))
     data_path_pre += "TREx/"
     data_path_post = ".jsonl"
     return relations, data_path_pre, data_path_post
@@ -200,15 +223,15 @@ def run_all_LMs(parameters):
 
 
 if __name__ == "__main__":
-
+    '''
     print("1. Google-RE")    
     parameters = get_GoogleRE_parameters()
     run_all_LMs(parameters)
-
+    '''
     print("2. T-REx")    
     parameters = get_TREx_parameters()
     run_all_LMs(parameters)
-
+    '''
     print("3. ConceptNet")
     parameters = get_ConceptNet_parameters()
     run_all_LMs(parameters)
@@ -217,4 +240,4 @@ if __name__ == "__main__":
     parameters = get_Squad_parameters()
     run_all_LMs(parameters)
 
-    
+    '''

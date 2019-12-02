@@ -6,15 +6,56 @@
 #
 import torch
 import pytorch_pretrained_bert.tokenization as btok
-from pytorch_pretrained_bert import BertTokenizer, BertForMaskedLM, BasicTokenizer, BertModel
+#from pytorch_pretrained_bert import BertTokenizer, BertForMaskedLM, BasicTokenizer, BertModel
+from transformers import BertTokenizer, BertForMaskedLM, BertModel, BasicTokenizer
 import numpy as np
 from lama.modules.base_connector import *
 import torch.nn.functional as F
 
+class CustomBertForMaskedLM(BertForMaskedLM):
+    def __init__(self, config):
+        super().__init__(config)
+
+    def resize_embedding_and_fc(self, new_num_tokens):
+        old_fc = self.cls.predictions.decoder
+        self.cls.predictions.decoder = self._get_resized_fc(old_fc, new_num_tokens)
+        old_bias = self.cls.predictions.bias
+        self.cls.predictions.bias = self._get_resized_bias(old_bias, new_num_tokens)
+        self.resize_token_embeddings(new_num_tokens)
+
+    def _get_resized_bias(self, old_bias, new_num_tokens):
+        old_num_tokens = old_bias.data.size()[0]
+        if old_num_tokens == new_num_tokens:
+            return old_bias
+
+        new_bias = torch.nn.Parameter(torch.zeros(new_num_tokens))
+        new_bias.to(old_bias.device)
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        new_bias.data[:num_tokens_to_copy] = old_bias.data[:num_tokens_to_copy]
+        return new_bias
+
+    def _get_resized_fc(self, old_fc, new_num_tokens):
+
+        old_num_tokens, old_embedding_dim = old_fc.weight.size()
+        if old_num_tokens == new_num_tokens:
+            return old_fc
+
+        # Create new weights
+        new_fc = torch.nn.Linear(in_features=old_embedding_dim, out_features=new_num_tokens)
+        new_fc.to(old_fc.weight.device)
+
+        # initialize all weights (in particular added tokens)
+        self._init_weights(new_fc)
+
+        # Copy from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        new_fc.weight.data[:num_tokens_to_copy, :] = old_fc.weight.data[:num_tokens_to_copy, :]
+        return new_fc
+
 
 class CustomBaseTokenizer(BasicTokenizer):
 
-    def tokenize(self, text):
+    def tokenize(self, text, **kwargs):
         """Tokenizes a piece of text."""
         text = self._clean_text(text)
         # This was added on November 1st, 2018 for the multilingual and Chinese
@@ -71,6 +112,7 @@ class Bert(Base_Connector):
 
         # Load pre-trained model tokenizer (vocabulary)
         self.tokenizer = BertTokenizer.from_pretrained(dict_file)
+        self.tokenizer.add_tokens(['[w1]', '[w2]', '[w3]', '[w4]', '[w5]', '[w6]', '[w7]', '[w8]', '[w9]'])
 
         # original vocab
         self.map_indices = None
@@ -83,7 +125,8 @@ class Bert(Base_Connector):
 
         # Load pre-trained model (weights)
         # ... to get prediction/generation
-        self.masked_bert_model = BertForMaskedLM.from_pretrained(bert_model_name)
+        #self.masked_bert_model = BertForMaskedLM.from_pretrained(bert_model_name)
+        self.masked_bert_model = CustomBertForMaskedLM.from_pretrained(bert_model_name)
 
         self.masked_bert_model.eval()
 
@@ -102,6 +145,9 @@ class Bert(Base_Connector):
             indexed_string = self.convert_ids(indexed_string)
 
         return indexed_string
+
+    def get_input_tensors_batch(self, sentences_list):
+        return self.__get_input_tensors_batch(sentences_list)
 
     def __get_input_tensors_batch(self, sentences_list):
         tokens_tensors_list = []
@@ -156,7 +202,7 @@ class Bert(Base_Connector):
         if len(sentences) > 2:
             print(sentences)
             raise ValueError("BERT accepts maximum two sentences in input for each data point")
-
+        
         first_tokenized_sentence = self.tokenizer.tokenize(sentences[0])
         first_segment_id = np.zeros(len(first_tokenized_sentence), dtype=int).tolist()
 
@@ -194,6 +240,7 @@ class Bert(Base_Connector):
         # Convert inputs to PyTorch tensors
         tokens_tensor = torch.tensor([indexed_tokens])
         segments_tensors = torch.tensor([segments_ids])
+        #print(tokens_tensor, masked_indices, tokenized_text)
 
         return tokens_tensor, segments_tensors, masked_indices, tokenized_text
 
@@ -227,9 +274,10 @@ class Bert(Base_Connector):
                 input_ids=tokens_tensor.to(self._model_device),
                 token_type_ids=segments_tensor.to(self._model_device),
                 attention_mask=attention_mask_tensor.to(self._model_device),
-            )
+            )[0]
 
-            log_probs = F.log_softmax(logits, dim=-1).cpu()
+            #log_probs = F.log_softmax(logits, dim=-1).cpu()
+            log_probs = torch.nn.functional.log_softmax(logits, dim=-1).cpu()
 
         token_ids_list = []
         for indexed_string in tokens_tensor.numpy():

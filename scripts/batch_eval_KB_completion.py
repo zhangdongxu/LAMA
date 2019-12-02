@@ -311,7 +311,7 @@ def main(args, shuffle_data=True, model=None):
     Precision_negative = 0.0
     Precision_positivie = 0.0
 
-    data = load_file(args.dataset_filename)
+    data = load_file(args.testset_filename)
 
     print(len(data))
 
@@ -350,15 +350,16 @@ def main(args, shuffle_data=True, model=None):
         print(local_msg)
         all_samples = []
         for fact in facts:
-            (sub, obj) = fact
-            sample = {}
-            sample["sub_label"] = sub
-            sample["obj_label"] = obj
-            # sobstitute all sentences with a standard template
-            sample["masked_sentences"] = parse_template(
-                args.template.strip(), sample["sub_label"].strip(), base.MASK
-            )
-            all_samples.append(sample)
+            for template_ in args.template:
+                (sub, obj) = fact
+                sample = {}
+                sample["sub_label"] = sub
+                sample["obj_label"] = obj
+                # sobstitute all sentences with a standard template
+                sample["masked_sentences"] = parse_template(
+                    template_.strip(), sample["sub_label"].strip(), base.MASK
+                )
+                all_samples.append(sample)
 
     # create uuid if not present
     i = 0
@@ -379,6 +380,7 @@ def main(args, shuffle_data=True, model=None):
     if num_threads <= 0:
         # use all available threads
         num_threads = multiprocessing.cpu_count()
+    print('number of threads {}'.format(num_threads))
     pool = ThreadPool(num_threads)
     list_of_results = []
 
