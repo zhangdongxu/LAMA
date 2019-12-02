@@ -1,0 +1,1 @@
+{"relation": "P176", "template": ["[X] [w4] [w5] [w6] [Y] ."], "label": "manufacturer", "description": "manufacturer or producer of this product", "type": "N-1"}
