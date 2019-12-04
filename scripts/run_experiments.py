@@ -108,7 +108,7 @@ def run_experiments(
             "trainset_filename": "{}{}_train{}".format(
                 data_path_pre, relation["relation"], data_path_post
             ),
-            "testset_filename": "{}{}_test{}".format(
+            "testset_filename": "{}{}{}".format(
                 data_path_pre, relation["relation"], data_path_post
             ),
             "common_vocab_filename": "pre-trained_language_models/common_vocab_cased.txt",
@@ -145,7 +145,7 @@ def run_experiments(
             [model_type_name] = args.models_names
             model = build_model_by_name(model_type_name, args)
             print('vocab size: {}'.format(model.masked_bert_model.config.vocab_size))
-            model.masked_bert_model.resize_embedding_and_fc(model.masked_bert_model.config.vocab_size + 9)
+            model.masked_bert_model.resize_embedding_and_fc(model.masked_bert_model.config.vocab_size + 138)
 
         
         run_train(args, model)

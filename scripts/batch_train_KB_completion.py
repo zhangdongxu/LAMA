@@ -181,7 +181,7 @@ def main(args, model):
             sys.stdout.flush()
     model_name = "BERT_{}".format(args.bert_model_name)
     loss = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.masked_bert_model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.masked_bert_model.parameters(), lr=1e-2)
 
     # deal with vocab subset
     vocab_subset = None
@@ -223,10 +223,11 @@ def main(args, model):
             sample["uuid"] = i
         i += 1
 
-    for _ in range(200):
+    count_step = 0
+    count_loss = 0
+    while True:
         shuffle(all_samples)
         samples_batches, sentences_batches, ret_msg = batchify(all_samples, args.batch_size)
-        loss_epoch = 0
         #for i in tqdm(range(len(samples_batches))):
         for i in range(len(samples_batches)):
             optimizer.zero_grad()
@@ -247,18 +248,29 @@ def main(args, model):
                 attention_mask=attention_mask_tensor.to(model._model_device),
             )[0]
             logits = logits[torch.arange(len(masked_indices_list)), masked_indices_list[0]]
+            #print(torch.max(logits, 1))
+            #print(logits)
+            #print(logits[0][label_index[0]])
             #print(logits.shape, label_index.shape)
             output = loss(logits, label_index)
             #print(output)
             output.backward()
-            loss_epoch += output.detach().cpu()
+            count_loss += output.detach().cpu()
             #output.grad.data[:-9,:].fill_(0)
             for name, param in model.masked_bert_model.named_parameters():
                 if 'word_embeddings' in name:
-                    param.grad.data[:-9,:].fill_(0.0)
+                    param.grad.data[:-138,:].fill_(0.0)
+                    #param.grad.data[:,:].fill_(0.0)
             optimizer.step()
-        print('loss: {}'.format(loss_epoch / len(samples_batches)))
-
+            if count_step % 10 == 0:
+                print('loss: {}'.format(count_loss / 10))
+                sys.stdout.flush()
+                count_loss = 0.0
+            if count_step > 1000:
+                break
+            count_step += 1
+        if count_step > 1000:
+            break
 
     return model
 

@@ -112,7 +112,8 @@ class Bert(Base_Connector):
 
         # Load pre-trained model tokenizer (vocabulary)
         self.tokenizer = BertTokenizer.from_pretrained(dict_file)
-        self.tokenizer.add_tokens(['[w1]', '[w2]', '[w3]', '[w4]', '[w5]', '[w6]', '[w7]', '[w8]', '[w9]'])
+        #self.tokenizer.add_tokens(['[w1]', '[w2]', '[w3]', '[w4]', '[w5]', '[w6]', '[w7]', '[w8]', '[w9]'])
+        self.tokenizer.add_tokens(['[w' + str(i) + ']' for i in range(1, 139)])
 
         # original vocab
         self.map_indices = None
